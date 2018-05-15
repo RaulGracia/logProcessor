@@ -14,8 +14,8 @@ The script is simple to use:
 - Modify the constant `LOGS_DIR` in the script to point to `my_log_dir`.
 - Execute `python processor.py`.
 
-*Note for Windows users: Due to how log files are packaged, unziped files may have path lengths larger than the max allowed
-length in Windows.
+*Note for Windows users: Due to how log files are packaged, unziped files may have path lengths larger than the max path length
+in Windows.
 
 ## Customization
 
