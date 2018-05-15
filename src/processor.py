@@ -1,5 +1,4 @@
 
-'''Base directory where logs from Pravega experiment are located'''
 import gzip
 import os, tarfile
 import shutil
@@ -8,6 +7,7 @@ import re
 import datetime
 import time
 
+'''Base directory where logs from Pravega experiment are located'''
 LOGS_DIR = "path_to_the_dir_with_build_logs"
 MAX_PREVIOUS_LINES = 2
 MAX_TRACE_LINES = 5
