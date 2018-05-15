@@ -8,7 +8,7 @@ import re
 import datetime
 import time
 
-LOGS_DIR = "/home/raul/Downloads/build_failed_1097/"
+LOGS_DIR = "path_to_the_dir_with_build_logs"
 MAX_PREVIOUS_LINES = 2
 MAX_TRACE_LINES = 5
 ERROR_KEYWORDS_TO_CATCH = ["exception", "Exception", "failure", " error ", "error:", "error)"]
