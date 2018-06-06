@@ -1,24 +1,31 @@
-
 import gzip
-import os, tarfile
+import os
+import tarfile
 import shutil
 import re
-
 import datetime
 import time
 
 '''Base directory where logs from Pravega experiment are located'''
-LOGS_DIR = "path_to_the_dir_with_build_logs"
+LOGS_DIR = "/home/raul/Downloads/build_failed_1155/"
 MAX_PREVIOUS_LINES = 2
 MAX_TRACE_LINES = 5
 ERROR_KEYWORDS_TO_CATCH = ["exception", "Exception", "failure", " error ", "error:", "error)"]
 OUTPUT_FILE = LOGS_DIR + 'errors_timeline.log'
+OUTPUT_TRANSACTION_FILE = LOGS_DIR + 'transactions_lifecycle.log'
+DATE_PATTERN = re.compile(r'(\d+-\d+-\d+\s+\d+:\d+:\d+,\d+)')
+
+'''Keywords for transaction logs'''
+TRANSACTION_KEYWORDS_TO_CATCH = ['i.p.c.t.S.StreamTransactionMetadataTasks', 'i.p.c.s.e.CommitEventProcessor',
+                                 'ENTER commitTransaction', 'ENTER checkTransactionStatus']
 
 error_traces = dict()
 error_traces['testjob'] = dict()
 error_traces['controller'] = dict()
 error_traces['segmentstore'] = dict()
 testlog_time_intervals = dict()
+
+transactions_lifecycle = dict()
 
 MAX_COLUMN_SIZE = 60
 COLUMN_SEPARATOR = '\t'
@@ -46,11 +53,52 @@ def extract(tar_url, extract_path='.'):
                 print "IO Error extracting ", item.name
 
 
-def check_error(log_line):
-    for keyword in ERROR_KEYWORDS_TO_CATCH:
+def check_line_for_keywords(log_line, keywords):
+    for keyword in keywords:
         if keyword in log_line:
             return True
     return False
+
+
+def extract_txn_id_time_and_message(line):
+    current_timestamp = long(time.mktime(datetime.datetime.strptime(line[0:line.index(',')], "%Y-%m-%d %H:%M:%S").timetuple()))
+
+    '''These patterns are for controller log messages'''
+    short_line = None
+    if "Txn=" in line: short_line = line[line.index("Txn=") + 4:]
+    elif "Transaction " in line: short_line = line[line.index("Transaction ") + 12:]
+    elif "transaction " in line: short_line = line[line.index("transaction ") + 12:]
+    elif "Transaction = " in line: short_line = line[line.index("Transaction = ") + 13:]
+
+    '''Get the transaction id from the line to log'''
+    if short_line is not None:
+        if "," in short_line:
+            txn_id = short_line[:short_line.index(",")]
+        else: txn_id = short_line[:short_line.index(" ")]
+    else: txn_id = line[line.rfind(" ")+1:-3]
+
+    return txn_id, current_timestamp, line[:-1]
+
+
+def process_transaction_log_line(line):
+    if not check_line_for_keywords(line, TRANSACTION_KEYWORDS_TO_CATCH):
+        '''If this line is not related to transactions, skip'''
+        return
+
+    txn_id, current_timestamp, message = extract_txn_id_time_and_message(line)
+
+    '''Initialize log for transaction'''
+    if txn_id not in transactions_lifecycle:
+        transactions_lifecycle[txn_id] = (None, [])
+
+    '''We will sort transactions according to their creation time to better understand their behavior'''
+    (transaction_ini_time, log_traces) = transactions_lifecycle[txn_id]
+    if transaction_ini_time is None or current_timestamp < transaction_ini_time:
+        transaction_ini_time = current_timestamp
+
+    '''Append the new log message for this transaction'''
+    log_traces.append((current_timestamp, message))
+    transactions_lifecycle[txn_id] = (transaction_ini_time, log_traces)
 
 
 def process_log(log_file_path, target_log):
@@ -58,15 +106,13 @@ def process_log(log_file_path, target_log):
     previous_lines = list()
     processing_error = False
     error_trace = ''
-    date_pattern = re.compile(r'(\d+-\d+-\d+\s+\d+:\d+:\d+,\d+)')
     current_timestamp = -1
     previous_datetime = None
     testjob_ini_timestamp = long(-1)
     testjob_end_timestamp = long(-1)
     error_lines = 0
     print "processing: ", log_file_path
-    if 'multicontroller' in log_file_path:
-        print "stop here"
+
     with open(log_file_path, 'r') as lf:
         for line in lf:
             '''Keep some lines before an error to better see the cause'''
@@ -75,7 +121,7 @@ def process_log(log_file_path, target_log):
                 previous_lines = previous_lines[1:]
 
             '''Check if we are on a regular log line (i.e., starts with date like 2018-04-24 20:37:02,584)'''
-            regular_line = len(line) > 24 and date_pattern.match(line) is not None
+            regular_line = len(line) > 24 and DATE_PATTERN.match(line) is not None
             if regular_line and line[:19] != previous_datetime:
                 current_timestamp = long(time.mktime(datetime.datetime.strptime(line[0:line.index(',')], "%Y-%m-%d %H:%M:%S").timetuple()))
                 previous_datetime = line[:19]
@@ -85,9 +131,13 @@ def process_log(log_file_path, target_log):
                 if testjob_ini_timestamp == -1:
                     testjob_ini_timestamp = current_timestamp
 
+            '''Inspect if this line should be logged for transactions'''
+            if regular_line:
+                process_transaction_log_line(line)
+
             '''Check if this line matches any of the errors we want to find'''
             if not processing_error:
-                processing_error = check_error(line)
+                processing_error = check_line_for_keywords(line, ERROR_KEYWORDS_TO_CATCH)
             else: processing_error = not regular_line
 
             if processing_error:
@@ -173,6 +223,38 @@ def pretty_log_errors_output():
     output_error_log.close()
 
 
+def pretty_transactions_log():
+    output_txn_log = open(OUTPUT_TRANSACTION_FILE, 'w')
+    sorted_transactions_per_timestamp = []
+    '''Sort the transactions based on their first timestamp'''
+    for txn_id in transactions_lifecycle.keys():
+        (transaction_first_timestamp, _) = transactions_lifecycle[txn_id]
+        sorted_transactions_per_timestamp.append((transaction_first_timestamp, txn_id))
+    sorted_transactions_per_timestamp.sort(key=lambda tup: tup[0])
+
+    '''Start writing transaction logs'''
+    for (txn_time, txn_id) in sorted_transactions_per_timestamp:
+        (_, txn_log_lines) = transactions_lifecycle[txn_id]
+        '''Sort the per transaction log lines by timestamp'''
+        txn_log_lines.sort(key=lambda tup: tup[1])
+
+        '''Identify those transactions that have too many messages, which often indicates problems'''
+        if len(txn_log_lines) > 30: print >> output_txn_log, '!' * 80
+        else: print >> output_txn_log, '-' * 80
+        (ini_txn_time, _) = txn_log_lines[0]
+        (end_txn_time, _) = txn_log_lines[-1]
+        print >> output_txn_log, "Txn id: ", txn_id, ", log lines recorded: ", len(txn_log_lines), \
+            ", txn duration (seconds): ", (end_txn_time - ini_txn_time)
+        if len(txn_log_lines) > 30: print >> output_txn_log, '!' * 80
+        else: print >> output_txn_log, '-' * 80
+
+        '''Print log lines for transaction'''
+        for (log_line_time, message) in txn_log_lines:
+            print >> output_txn_log, message
+
+    output_txn_log.close()
+
+
 if __name__ == "__main__":
     ini_time = time.time()
 
@@ -200,6 +282,7 @@ if __name__ == "__main__":
     '''Third, output the sequence of events in appropriate format for debug'''
     print "Generating output..."
     pretty_log_errors_output()
+    pretty_transactions_log()
     print "Done with generating output..."
 
     print "Num errors in testjob", len(error_traces['testjob'])
