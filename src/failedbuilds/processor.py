@@ -7,7 +7,7 @@ import datetime
 import time
 
 '''Base directory where logs from Pravega experiment are located'''
-LOGS_DIR = "/home/raul/Downloads/build_failed_1155/"
+LOGS_DIR = "C:/Users/gracir1/Downloads/archive/results/"
 MAX_PREVIOUS_LINES = 2
 MAX_TRACE_LINES = 5
 ERROR_KEYWORDS_TO_CATCH = ["exception", "Exception", "failure", " error ", "error:", "error)"]
