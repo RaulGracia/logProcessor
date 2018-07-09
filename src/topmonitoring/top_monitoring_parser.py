@@ -4,7 +4,7 @@ import time
 {print systime(), $0}' > top_monitoring.txt &'''
 
 '''Base directory where top monitoring logs are located'''
-LOGS_DIR = "resources/top_monitoring_sample.txt"
+LOGS_DIR = "resources/top_monitoring.txt"
 
 '''Output files'''
 PROCESS_MEMORY_OUTPUT = "process_memory_monitoring.txt"
@@ -56,19 +56,33 @@ def parse_top_monitoring(log_file_path):
                 process_dict[process_id]['mem_rel'] = list()
                 process_dict[process_id]['mem_res'] = list()
 
-            process_dict[process_id]['cpu_rel'].append(float(line_splits[9]))
-            process_dict[process_id]['mem_rel'].append(float(line_splits[10]))
+            process_dict[process_id]['cpu_rel'].append((timestamp-initial_timestamp, float(line_splits[9])))
+            process_dict[process_id]['mem_rel'].append((timestamp-initial_timestamp, float(line_splits[10])))
 
             mem_reserved = line_splits[6]
             if 'g' in mem_reserved:
                 mem_reserved = mem_reserved.replace("g", "")
-                mem_reserved = long(float(mem_reserved) * 1024 * 1024 * 1024)
+                mem_reserved = long(float(mem_reserved) * 1024 * 1024)
             elif 'm' in mem_reserved:
                 mem_reserved = mem_reserved.replace("m", "")
-                mem_reserved = long(float(mem_reserved) * 1024 * 1024)
+                mem_reserved = long(float(mem_reserved) * 1024)
             else: mem_reserved = long(mem_reserved)
 
-            process_dict[process_id]['mem_res'].append(mem_reserved)
+            process_dict[process_id]['mem_res'].append((timestamp-initial_timestamp, long(mem_reserved)))
+
+
+def output_per_process_metric(output_file, metric_name, experiment_length):
+    for proc_id in sorted(process_dict):
+        ini_values = [0] * int(experiment_length/3 + 1)
+        for value_tuple in process_dict[proc_id][metric_name]:
+            ini_values[value_tuple[0]/3] = str(value_tuple[1])
+
+        '''Remove periodic zero values that come from non-perfect periodicity of top command'''
+        for i in range(2, len(ini_values)):
+            if ini_values[i-1] == 0 and ini_values[i] != 0:
+                ini_values[i-1] = ini_values[i]
+
+        print >> output_file, proc_id + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
 
 
 def print_pretty_output():
@@ -79,27 +93,32 @@ def print_pretty_output():
     for (t_cpu, t_mem) in zip(cpu_results, mem_results):
         print >> output_file_system, t_cpu[0], t_cpu[1], t_mem[1] / 1024.  # Results in MB of system memory
 
+    '''Delete short-lived processes and the the maximum living process'''
+    experiment_length = None
     for proc_id in sorted(process_dict):
-        output_line = proc_id
-        for cpu_rel in process_dict[proc_id]['cpu_rel']:
-            output_line += ' ' + str(cpu_rel)
-        print >> output_file_proc_cpu, output_line
+        if len(process_dict[proc_id]['cpu_rel']) < 50:
+            del process_dict[proc_id]
+        else:
+            for t_cpu in process_dict[proc_id]['cpu_rel']:
+                if experiment_length is None or t_cpu[0] > experiment_length:
+                    experiment_length = t_cpu[0]
 
-    for proc_id in sorted(process_dict):
-        output_line = proc_id
-        for cpu_rel in process_dict[proc_id]['mem_rel']:
-            output_line += ' ' + str(cpu_rel)
-        print >> output_file_proc_mem, output_line
-        output_line = proc_id
-        for cpu_rel in process_dict[proc_id]['mem_res']:
-            output_line += ' ' + str(cpu_rel)
-        print >> output_file_proc_mem, output_line
+    print "Longest process: ", experiment_length
+
+    timeline = ''
+    for i in range(0, experiment_length, 3):
+        timeline += '\t' + str(i)
+
+    print >> output_file_proc_cpu, timeline
+    output_per_process_metric(output_file_proc_cpu, 'cpu_rel', experiment_length)
+
+    print >> output_file_proc_mem, timeline
+    output_per_process_metric(output_file_proc_mem, 'mem_rel', experiment_length)
+    output_per_process_metric(output_file_proc_mem, 'mem_res', experiment_length)
 
     output_file_proc_mem.close()
     output_file_proc_cpu.close()
     output_file_system.close()
-
-
 
 
 if __name__ == "__main__":
