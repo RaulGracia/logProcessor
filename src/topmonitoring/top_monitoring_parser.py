@@ -1,10 +1,9 @@
 import time
 
-'''Simple parsing script for the command nohup top -b | awk '/bash|Swap:|Mem :|Cpu|influx|ssh|java|beam.smp|dockerd/ 
-{print systime(), $0}' > top_monitoring.txt &'''
+'''Simple parsing script for the command nohup top -b | awk '/bash|Swap:|Mem :|Cpu|influx|ssh|java|beam.smp|dockerd/ {print systime(), $0}' > top_monitoring.txt &'''
 
 '''Base directory where top monitoring logs are located'''
-LOGS_DIR = "resources/top_monitoring.txt"
+LOGS_DIR = "resources/top_monitoring_run_1120.txt"
 
 '''Output files'''
 PROCESS_MEMORY_OUTPUT = "process_memory_monitoring.txt"
@@ -25,6 +24,9 @@ def parse_top_monitoring(log_file_path):
     with open(log_file_path, 'r') as lf:
         for line in lf:
             line = ' '.join(line[:-1].split())
+
+            if len(line.split(" ")) < 12:
+                continue
 
             timestamp = long(line[:line.index(" ")])
             if initial_timestamp is None:
