@@ -91,8 +91,9 @@ def print_pretty_output():
     output_file_proc_swaping= open(PROCESS_SWAPING_OUTPUT, 'w')
     output_file_proc_io = open(PROCESS_IO_OUTPUT, 'w')
 
-    for (t_total_w, t_total_r, t_actual_w, t_actual_r) in zip(io_total_write_results, io_total_read_results, io_actual_write_results, io_actual_read_results):
-        print >> output_file_system, t_total_w[0], t_total_w[1] / 1024., t_total_r[1] / 1024., t_actual_w[1] / 1024., t_actual_r[1] / 1024.  # Results in MB of system memory
+    print >> output_file_system, "TIME TOTAL_READ TOTAL_WRITE ACTUAL_READ ACTUAL_WRITE"
+    for (t_total_r, t_total_w, t_actual_r, t_actual_w) in zip(io_total_read_results, io_total_write_results, io_actual_read_results, io_actual_write_results):
+        print >> output_file_system, t_total_w[0], t_total_r[1] / 1024., t_total_w[1] / 1024., t_actual_r[1] / 1024., t_actual_w[1] / 1024.  # Results in MB of system memory
 
     '''Delete short-lived processes and the the maximum living process'''
     experiment_length = None
@@ -127,13 +128,5 @@ def print_pretty_output():
 if __name__ == "__main__":
     ini_time = time.time()
     parse_iotop_monitoring(LOGS_DIR)
-    print io_total_read_results
-    print io_total_write_results
-    print io_actual_read_results
-    print io_actual_write_results
-    for k in process_dict.keys():
-        print k
-        for i in process_dict[k]:
-            print i, process_dict[k][i]
     print_pretty_output()
     print "Time elapsed (sec.): ", (time.time() - ini_time)
