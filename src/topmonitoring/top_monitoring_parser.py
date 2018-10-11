@@ -1,6 +1,9 @@
 import time
 
-'''Simple parsing script for the command nohup top -b | awk '/bash|Swap:|Mem :|Cpu|influx|ssh|java|beam.smp|dockerd/ {print systime(), $0}' > top_monitoring.txt &'''
+'''Simple parsing script for the command nohup top -b -d 3 | awk '/bash|Swap:|Mem :|Cpu|influx|ssh|java|beam.smp|dockerd/ {print systime(), $0}' > top_monitoring.txt &'''
+
+'''Measurement periodicity'''
+PERIODICITY = 3
 
 '''Base directory where top monitoring logs are located'''
 LOGS_DIR = "resources/top_monitoring_run_1120.txt"
@@ -75,9 +78,9 @@ def parse_top_monitoring(log_file_path):
 
 def output_per_process_metric(output_file, metric_name, experiment_length):
     for proc_id in sorted(process_dict):
-        ini_values = [0] * int(experiment_length/3 + 1)
+        ini_values = [0] * int(experiment_length/PERIODICITY + 1)
         for value_tuple in process_dict[proc_id][metric_name]:
-            ini_values[value_tuple[0]/3] = str(value_tuple[1])
+            ini_values[value_tuple[0]/PERIODICITY] = str(value_tuple[1])
 
         '''Remove periodic zero values that come from non-perfect periodicity of top command'''
         for i in range(2, len(ini_values)):
@@ -108,7 +111,7 @@ def print_pretty_output():
     print "Longest process: ", experiment_length
 
     timeline = ''
-    for i in range(0, experiment_length, 3):
+    for i in range(0, experiment_length, PERIODICITY):
         timeline += '\t' + str(i)
 
     print >> output_file_proc_cpu, timeline
