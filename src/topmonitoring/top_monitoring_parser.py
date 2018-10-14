@@ -6,7 +6,7 @@ import time
 PERIODICITY = 3
 
 '''Base directory where top monitoring logs are located'''
-LOGS_DIR = "resources/top_monitoring_run_1120.txt"
+LOGS_DIR = "resources/run_1337_top_monitoring_slave1.txt"
 
 '''Output files'''
 PROCESS_MEMORY_OUTPUT = "process_memory_monitoring.txt"
@@ -90,6 +90,17 @@ def output_per_process_metric(output_file, metric_name, experiment_length):
         print >> output_file, proc_id + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
 
 
+def transpose(filename):
+    f = open(filename, 'rt')
+    f2 = open("transposed_" + filename, 'w')
+
+    for c in zip(*(l.split() for l in f.readlines() if l.strip())):
+        print >> f2, ' '.join(c)
+
+    f.close()
+    f2.close()
+
+
 def print_pretty_output():
     output_file_proc_mem = open(PROCESS_MEMORY_OUTPUT, 'w')
     output_file_proc_cpu = open(PROCESS_CPU_OUTPUT, 'w')
@@ -124,6 +135,9 @@ def print_pretty_output():
     output_file_proc_mem.close()
     output_file_proc_cpu.close()
     output_file_system.close()
+
+    transpose(PROCESS_MEMORY_OUTPUT)
+    transpose(PROCESS_CPU_OUTPUT)
 
 
 if __name__ == "__main__":
