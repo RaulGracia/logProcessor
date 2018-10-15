@@ -1,4 +1,6 @@
 import time
+import csv
+from itertools import izip
 
 '''Simple parsing script for the command nohup iotop -b -P -o -k -d 3 | awk '/bash|Total|Actual|PID|influx|ssh|java|beam.smp|mesos|dockerd/ {print systime(), $0}' | cut -c -220 > iotop_monitoring.txt &'''
 
@@ -6,7 +8,7 @@ import time
 PERIODICITY = 3
 
 '''Base directory where top monitoring logs are located'''
-LOGS_DIR = "resources/iotop_monitoring.txt"
+LOGS_DIR = "resources/run_1337_iotop_monitoring_slave1.txt"
 
 '''Output files'''
 SYSTEM_IO_OUTPUT = "system_io_monitoring.txt"
@@ -24,6 +26,7 @@ io_total_write_results = list()
 io_total_read_results = list()
 io_actual_write_results = list()
 io_actual_read_results = list()
+pid_to_process_name = dict()
 
 
 def parse_iotop_monitoring(log_file_path):
@@ -55,7 +58,7 @@ def parse_iotop_monitoring(log_file_path):
                 continue
 
             '''Per process headers PID  PRIO  USER     DISK READ  DISK WRITE  SWAPIN      IO    COMMAND'''
-            process_id = line_splits[1] + "-" + line_splits[-1]
+            process_id = line_splits[1]
 
             if process_id not in process_dict:
                 process_dict[process_id] = dict()
@@ -63,6 +66,10 @@ def parse_iotop_monitoring(log_file_path):
                 process_dict[process_id]['disk_write'] = list()
                 process_dict[process_id]['swaping'] = list()
                 process_dict[process_id]['io'] = list()
+                pid_to_process_name[process_id] = list()
+
+            if line_splits[-1] not in pid_to_process_name[process_id]:
+                pid_to_process_name[process_id].append(line_splits[-1])
 
             process_dict[process_id]['disk_read'].append((timestamp-initial_timestamp, float(line_splits[4])))
             process_dict[process_id]['disk_write'].append((timestamp-initial_timestamp, float(line_splits[6])))
@@ -81,7 +88,27 @@ def output_per_process_metric(output_file, metric_name, experiment_length):
             if ini_values[i-1] == 0 and ini_values[i] != 0:
                 ini_values[i-1] = ini_values[i]
 
-        print >> output_file, proc_id + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
+        # Add human-friendly labels to processes
+        if proc_id in pid_to_process_name:
+            if "java-cp/opt/bookkeeper/conf" in pid_to_process_name[proc_id][0]:
+                print >> output_file, proc_id + "-bookkeeper" + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
+            elif "java-Dzookeeper.log.dir" in pid_to_process_name[proc_id][0]:
+                print >> output_file, proc_id + "-zookeeper" + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
+            else:
+                print >> output_file, proc_id + '-' + pid_to_process_name[proc_id][0] + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
+        else:
+            print >> output_file, proc_id + '\t' + str(ini_values).replace("[", "").replace("]", "").replace(", ", "\t").replace("\'", "")
+
+
+def transpose(filename):
+    f = open(filename, 'rt')
+    f2 = open("transposed_" + filename, 'w')
+
+    for c in zip(*(l.split() for l in f.readlines() if l.strip())):
+        print >> f2, ' '.join(c)
+
+    f.close()
+    f2.close()
 
 
 def print_pretty_output():
@@ -123,6 +150,11 @@ def print_pretty_output():
     output_file_proc_disk_write.close()
     output_file_proc_swaping.close()
     output_file_proc_io.close()
+
+    transpose(PROCESS_DISK_WRITE_OUTPUT)
+    transpose(PROCESS_DISK_READ_OUTPUT)
+    transpose(PROCESS_SWAPING_OUTPUT)
+    transpose(PROCESS_IO_OUTPUT)
 
 
 if __name__ == "__main__":
